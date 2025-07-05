@@ -1,5 +1,7 @@
+import { ChatCompletion } from "./types/ChatCompletion";
+
 export interface Env {
-  AI: Ai;
+  OPENAI_API_KEY: string;
 }
 
 export default {
@@ -22,21 +24,43 @@ export default {
       });
     }
 
-		console.log(nickname)
+    console.log('Nickname: ', nickname)
+
     const messages = [
       {
         role: "system",
-        content: "You are a helpful assistant that evaluates nicknames. You must respond with ONLY 'yes' or 'no'. 'yes' means the nickname is acceptable, 'no' means it's inappropriate. A nickname is inappropriate ONLY if it contains: hate speech, racism, terrorism, explicit sexual content, names/references from the Naruto anime/manga series, or terms implying administrative/moderator authority (like 'admin', 'mod', 'game master', 'GM', etc). Common gaming terms like 'sword', 'warrior', 'hunter', 'gun', 'shooter', etc are acceptable even if combined with violence-related words, as long as they don't promote extreme violence or gore. Be consistent in your responses - the same nickname should always get the same response."
+        content: "You are a helpful assistant that evaluates nicknames. You must respond with ONLY 'yes' or 'no'. 'yes' means the nickname is acceptable, 'no' means it's inappropriate. A nickname is inappropriate if it contains ANY of the following in ANY language: hate speech, racism, terrorism, explicit sexual content, violence against specific groups, references to rape/assault, names/references from the Naruto anime/manga series, or terms implying administrative/moderator authority (like 'admin', 'mod', 'game master', 'GM', etc). You must check the meaning of the nickname in common languages like English, Spanish, French, etc. Common gaming terms like 'sword', 'warrior', 'hunter', 'gun', 'shooter' are acceptable only in gaming contexts and when not combined with references to specific groups or explicit violence."
       },
       {
         role: "user",
-        content: `Is this nickname appropriate: "${nickname}"? Remember that gaming-style nicknames (like Dragon-Slayer, Dark-Knight, etc) are acceptable. Only respond 'no' if it contains hate speech, racism, terrorism, explicit content, Naruto references, or implies administrative/moderator authority. Be consistent - this nickname should always get the same response.`
+        content: `Is this nickname appropriate: "${nickname}"? Check its meaning in common languages like English, Spanish, French, etc. Respond 'no' if it contains hate speech, racism, terrorism, explicit content, violence against specific groups, references to rape/assault, Naruto references, or implies administrative authority in ANY language.`
       }
     ];
-    const response = await env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", { messages });
 
-		console.log(response)
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4.1-nano",
+        messages: messages,
+        temperature: 0.7,
+        max_tokens: 5
+      })
+    });
 
-    return new Response(JSON.stringify(response));
+    const data: ChatCompletion = await response.json();
+    console.log('Response: ', data);
+
+    return new Response(JSON.stringify({
+      result: data.choices[0].message.content,
+      usage: {
+				prompt_tokens: data.usage.prompt_tokens,
+        completion_tokens: data.usage.completion_tokens,
+        total_tokens: data.usage.total_tokens
+      }
+    }));
   },
 } satisfies ExportedHandler<Env>;
