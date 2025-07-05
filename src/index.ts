@@ -32,7 +32,7 @@ export default {
         },
         {
           role: "user",
-          content: `Is this nickname appropriate: "${nickname}"? Consider it inappropriate if it containJs hate speech, racism, terrorism, extreme violence, explicit content, or names from the Naruto series.`
+          content: `Is this nickname appropriate: "${nickname}"? Consider it inappropriate if it contains hate speech, racism, terrorism, extreme violence, explicit content, or names from characters in the Naruto series.`
         }
       ]
     });
