@@ -1,5 +1,8 @@
+import { promptLambdaAi } from './promptLambdaAi';
+
 export interface Env {
   AI: Ai;
+  LAMBDA_API_KEY: string;
 }
 
 export default {
@@ -31,11 +34,11 @@ export default {
       });
     }
 
-    // Prompt 1: Naruto references
+    // * Prompt 1: Naruto exact match
     const narutoMessages = [
       {
         role: "system",
-        content: "Check if the nickname is exactly the name of a character from the Naruto anime/manga series (not a reference, but an exact match to a character's name, in any language or spelling). Reply only 'yes' or 'no'."
+        content: `Check if the nickname is exactly the name of a character from the Naruto anime/manga series (not a reference, but an exact match to a character's name, in any language or spelling). Reply only "yes" or "no".`
       },
       {
         role: "user",
@@ -43,13 +46,13 @@ export default {
       }
     ];
 
-    // Prompt 2: Hate, racism, terrorism, gay, violence, sexual references, etc.
+    // * Prompt 2: Hate, racism, terrorism, gay, violence, sexual references, etc.
     const violenceMessages = [
       {
         role: "system",
         content: `You are reviewing a nickname for a video game. Reject any nickname that contains or implies hate, racism, terrorism, the word "gay" (in any context), violence, or any sexual reference, in any language or with any creative spelling or word combinations.
 However, be careful NOT to reject nicknames that are valid names for video game or fantasy characters, such as "warrior", "demon_slayer", "assassin", "hunter", "gun", "shooter", etc., even if they imply combat or fantasy.
-If the nickname contains or implies hate, racism, terrorism, the word "gay", realistic violence, or any sexual reference (explicit or implicit), reply 'yes'. If it is a valid name for a fantasy or action video game character, reply 'no'. Reply only 'yes' or 'no'.`
+If the nickname contains or implies hate, racism, terrorism, the word "gay", realistic violence, or any sexual reference (explicit or implicit), reply "yes". If it is a valid name for a fantasy or action video game character, reply "no". Reply only "yes" or "no".`
       },
       {
         role: "user",
@@ -57,11 +60,11 @@ If the nickname contains or implies hate, racism, terrorism, the word "gay", rea
       }
     ];
 
-    // Prompt 3: Admin/moderator authority
+    // * Prompt 3: Admin/moderator authority
     const adminMessages = [
       {
         role: "system",
-        content: "Check if the nickname suggests admin or moderator authority (any language). Reply only 'yes' or 'no'."
+        content: `Check if the nickname suggests admin or moderator authority (any language). Reply only "yes" or "no".`
       },
       {
         role: "user",
@@ -69,40 +72,33 @@ If the nickname contains or implies hate, racism, terrorism, the word "gay", rea
       }
     ];
 
-    // Run all three checks in parallel
     const [narutoResp, violenceResp, adminResp] = await Promise.all([
-      env.AI.run("@cf/meta/llama-3.1-8b-instruct", { messages: narutoMessages, temperature: 1.0 }),
-      env.AI.run("@cf/meta/llama-3.1-8b-instruct", { messages: violenceMessages, temperature: 1.0 }),
-      env.AI.run("@cf/meta/llama-3.1-8b-instruct", { messages: adminMessages, temperature: 1.0 }),
+      promptLambdaAi(narutoMessages, env.LAMBDA_API_KEY),
+      promptLambdaAi(violenceMessages, env.LAMBDA_API_KEY),
+      promptLambdaAi(adminMessages, env.LAMBDA_API_KEY)
     ]);
 
-    // If any check returns 'yes', the nickname is inappropriate
     const results = [
-      narutoResp.response,
-      violenceResp.response,
-      adminResp.response
+      narutoResp.choices?.[0]?.message?.content,
+      violenceResp.choices?.[0]?.message?.content,
+      adminResp.choices?.[0]?.message?.content
     ].map(r => (typeof r === "string" ? r.trim().toLowerCase() : ""));
 
     const isAppropriate = results.every(r => r === "no");
-
-    function extractTokens(resp: any) {
-      return resp.tokens ?? resp.usage ?? resp.token_usage ?? null;
-    }
-
-    let details: any = {
-      naruto: results[0],
-      naruto_tokens: extractTokens(narutoResp),
-      violence: results[1],
-      violence_tokens: extractTokens(violenceResp),
-      admin: results[2],
-      admin_tokens: extractTokens(adminResp)
-    };
 
     const responseBody: any = {
       result: isAppropriate ? "yes" : "no"
     };
 
     if (debug) {
+      let details: any = {
+        naruto: results[0],
+        naruto_tokens: narutoResp?.usage ?? null,
+        violence: results[1],
+        violence_tokens: violenceResp?.usage ?? null,
+        admin: results[2],
+        admin_tokens: adminResp?.usage ?? null
+      };
       responseBody.details = details;
     }
 
