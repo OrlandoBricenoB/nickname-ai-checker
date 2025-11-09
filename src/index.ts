@@ -1,8 +1,7 @@
-import { promptLambdaAi } from './promptLambdaAi';
+import { promptGoogleAi } from './promptGoogleAi';
 
 export interface Env {
-  AI: Ai;
-  LAMBDA_API_KEY: string;
+  GOOGLE_AI_API_KEY: string;
 }
 
 export default {
@@ -22,6 +21,8 @@ export default {
     const url = new URL(request.url);
     const nickname = url.searchParams.get('nickname');
     const debug = url.searchParams.has('debug');
+
+    console.log({ nickname, debug })
 
     if (!nickname) {
       return new Response(JSON.stringify({
@@ -72,16 +73,35 @@ If the nickname contains or implies hate, racism, terrorism, the word "gay", rea
       }
     ];
 
-    const [narutoResp, violenceResp, adminResp] = await Promise.all([
-      promptLambdaAi(narutoMessages, env.LAMBDA_API_KEY),
-      promptLambdaAi(violenceMessages, env.LAMBDA_API_KEY),
-      promptLambdaAi(adminMessages, env.LAMBDA_API_KEY)
-    ]);
+    let narutoResp, violenceResp, adminResp;
+    try {
+      [narutoResp, violenceResp, adminResp] = await Promise.all([
+        promptGoogleAi(narutoMessages, env.GOOGLE_AI_API_KEY),
+        promptGoogleAi(violenceMessages, env.GOOGLE_AI_API_KEY),
+        promptGoogleAi(adminMessages, env.GOOGLE_AI_API_KEY)
+      ]);
+    } catch (err: any) {
+      console.error('Error communicating with Google AI:', err && (err.stack ?? err.message ?? err));
+      let errMsg = 'Error communicating with Google AI';
+      // Try to identify a network error / timeout
+      if (err && typeof err.message === 'string' && /timeout|timed out|network|fetch/i.test(err.message)) {
+        errMsg = 'Google AI request timed out or failed to connect';
+      }
+      return new Response(JSON.stringify({
+        error: errMsg,
+        detail: err?.message ?? String(err)
+      }), {
+        status: 504,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    }
 
     const results = [
-      narutoResp.choices?.[0]?.message?.content,
-      violenceResp.choices?.[0]?.message?.content,
-      adminResp.choices?.[0]?.message?.content
+      narutoResp?.candidates?.[0]?.content?.parts?.[0]?.text,
+      violenceResp?.candidates?.[0]?.content?.parts?.[0]?.text,
+      adminResp?.candidates?.[0]?.content?.parts?.[0]?.text
     ].map(r => (typeof r === "string" ? r.trim().toLowerCase() : ""));
 
     const isAppropriate = results.every(r => r === "no");
@@ -93,11 +113,11 @@ If the nickname contains or implies hate, racism, terrorism, the word "gay", rea
     if (debug) {
       let details: any = {
         naruto: results[0],
-        naruto_tokens: narutoResp?.usage ?? null,
+        naruto_tokens: narutoResp?.usageMetadata ?? null,
         violence: results[1],
-        violence_tokens: violenceResp?.usage ?? null,
+        violence_tokens: violenceResp?.usageMetadata ?? null,
         admin: results[2],
-        admin_tokens: adminResp?.usage ?? null
+        admin_tokens: adminResp?.usageMetadata ?? null
       };
       responseBody.details = details;
     }
@@ -107,5 +127,5 @@ If the nickname contains or implies hate, racism, terrorism, the word "gay", rea
         'Content-Type': 'application/json'
       }
     });
-  },
-} satisfies ExportedHandler<Env>;
+  }
+}
